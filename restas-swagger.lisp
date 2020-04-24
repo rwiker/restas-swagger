@@ -120,14 +120,15 @@
   (setf (gethash target *swagger-modules*) (make-swagger-module declarations)))
 
 (defun extract-summary (doc-string)
-  (with-input-from-string (s doc-string)
-    (let ((line (read-line s nil)))
-      (let ((pos (position #\. line)))
-        (if pos
-          (subseq line 0 (1+ pos))
-          (if (read-line s nil)
-            (concatenate 'string line "...")
-            (concatenate 'string line ".")))))))
+  (when doc-string
+    (with-input-from-string (s doc-string)
+      (let ((line (read-line s nil)))
+        (let ((pos (position #\. line)))
+          (if pos
+            (subseq line 0 (1+ pos))
+            (if (read-line s nil)
+              (concatenate 'string line "...")
+              (concatenate 'string line "."))))))))
 
 (restas:define-declaration :swagger/route :route (declarations target traits)
   (let ((sw-module (get-swagger-module (symbol-package target)))
@@ -144,7 +145,7 @@
         (setf (getf declarations :produces)
               (list content-type)))
       (dolist (var variables)
-        (unless (getf parameters var )
+        (unless (getf parameters var)
           (setf (getf parameters var) `(:type string :in "path"))))
       (setf (getf declarations :parameters) parameters)
       (unless (getf declarations :summary)
