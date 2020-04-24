@@ -3,6 +3,8 @@
 
 Simple RESTAS plugin for documenting REST APIs, using the OpenAPI (swagger) format.
 
+Note: Work in Progress; Guaranteed not to work.
+
 ## License
 
 Copyright 2019 Raymond Wiker

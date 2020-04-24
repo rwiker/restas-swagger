@@ -15,20 +15,6 @@
   (make-hash-table)
   "Mapping from mounted module (packages) to swagger-module objects.")
 
-#||
-(loop for v being the hash-values of *swagger-modules*
-      collect (cl-json:encode-json-to-string
-               `((:swagger . "2.0")
-                 (:info .
-                  ,(loop for slot in '(title description version terms-of-service
-                                             contact license)
-                         for value = (and (slot-boundp v slot)
-                                          (slot-value v slot))
-                         when value
-                         collect (cons slot value)))
-                 (:paths . ,(sw-paths v)))))
-||#
-
 (defun valid-keyword-list-p (keys-and-values)
   (and (evenp (length keys-and-values))
        (every (lambda (k) (and (symbolp k) (keywordp k)))
@@ -65,6 +51,25 @@
     (loop for (key value . nil) on keys-and-values by 'cddr
           do (setf (slot-value module (intern (symbol-name key) '#:restas-swagger))
                    value))))
+
+;;; FIXME: does not quite work... some more attention needed on paths.
+(defun get-swagger-definition/json (package)
+  (let ((module (get-swagger-module package)))
+    (when module
+      (cl-json:encode-json-to-string
+       `((:swagger . "2.0")
+         (:info .
+          ,(loop for slot in '(title description version terms-of-service
+                                     contact license)
+                 for value = (and (slot-boundp module slot)
+                                  (slot-value module slot))
+                 when value
+                 collect (cons slot value)))
+         (:paths . ,(sw-paths module)))))))
+
+#||
+(get-swagger-definition/json 'sumo-surface-proto/api-v1)
+||#
 
 (defclass swagger-path ()
   ((path :accessor sw-path :initarg :path)
