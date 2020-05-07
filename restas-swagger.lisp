@@ -11,6 +11,27 @@
    (license :accessor sw-license :initarg :license :initform nil)
    (paths :accessor sw-paths :initform (make-hash-table :test #'equal))))
 
+(defmethod serialize-for-json ((object t))
+  (identity object))
+
+(defmethod serialize-for-json ((object list))
+  (if (valid-keyword-list-p object)
+    (loop for (key val . nil) on object by 'cddr
+          collect (cons key (serialize-for-json val)))
+    (mapcar 'serialize-for-json object)))
+
+(defmethod serialize-for-json ((object swagger-module))
+  `((:swagger . "2.0")
+    (:info .
+     ,(loop for slot in '(title description version terms-of-service
+                                contact license)
+            for value = (and (slot-boundp object slot)
+                             (slot-value object slot))
+            when value
+            collect (cons slot (serialize-for-json value))))
+    (:paths . ,(loop for path being the hash-value of (sw-paths object)
+                     collect (serialize-for-json path)))))
+
 (defvar *swagger-modules*
   (make-hash-table)
   "Mapping from mounted module (packages) to swagger-module objects.")
@@ -56,16 +77,7 @@
 (defun get-swagger-definition/json (package)
   (let ((module (get-swagger-module package)))
     (when module
-      (cl-json:encode-json-to-string
-       `((:swagger . "2.0")
-         (:info .
-          ,(loop for slot in '(title description version terms-of-service
-                                     contact license)
-                 for value = (and (slot-boundp module slot)
-                                  (slot-value module slot))
-                 when value
-                 collect (cons slot value)))
-         (:paths . ,(sw-paths module)))))))
+      (cl-json:encode-json-to-string (serialize-for-json module)))))
 
 #||
 (get-swagger-definition/json 'sumo-surface-proto/api-v1)
@@ -75,17 +87,37 @@
   ((path :accessor sw-path :initarg :path)
    (operations :accessor sw-operations :initform nil)))
 
+(defmethod serialize-for-json ((object swagger-path))
+  (flet ((ensure-absolute (path)
+           (if (char= (char path 0) #\/)
+             path
+             (concatenate 'string "/" path))))
+    (cons (ensure-absolute (sw-path object))
+          (loop for (method operation . nil ) on (sw-operations object) by 'cddr
+                collect (cons method (serialize-for-json operation))))))
+
 (defclass swagger-operation ()
   ((tags :accessor sw-tags :initarg :tags :initform nil)
    (summary :accessor sw-summary :initarg :summary :initform nil)
    (description :accessor sw-description :initarg :description :initform nil)
-   (id :accessor sw-id :initarg :id)
+   (operation-id :accessor sw-id :initarg :id)
    (consumes :accessor sw-consumes :initarg :consumes :initform nil)
    (produces :accessor sw-produces :initarg :produces :initform nil)
    (parameters :accessor sw-parameters :initarg :parameters :initform nil)
    (responses :accessor sw-responses :initarg :responses :initform nil)
    (deprecated :accessor sw-deprecated :initarg :deprecated :initform nil)
    (security :accessor sw-security :initarg :security :initform nil)))
+
+(defmethod serialize-for-json ((object swagger-operation))
+  (loop for slot in '(tags summary description
+                           operation-id consumes produces
+                           parameters responses
+                           deprecated security)
+        for value = (when (slot-boundp object slot)
+                      (slot-value object slot))
+        when value
+        collect (cons slot (serialize-for-json value))))
+
 
 (defun make-swagger-operation  (id keys-and-values)
   (assert (valid-keyword-list-p keys-and-values))
