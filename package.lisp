@@ -2,28 +2,19 @@
 
 (defpackage #:restas-swagger/utilities
   (:use #:cl)
-  (:export #:maybe-simplify-type
-           #:valid-keyword-list-p
+  (:export #:valid-keyword-list-p
            #:slot-valid
            #:slots-valid
            #:extract-summary
-           #:recursively-construct
+           #:expand-args
            #:serialize-for-json
            #:serialize-for-json-using-slots
            #:as-url-component
            #:as-url))
 
-(defpackage #:restas-swagger/openapi
-  (:use #:cl #:restas-swagger/utilities))
-
-(defpackage #:restas-swagger/swagger
-  (:use #:cl #:restas-swagger/utilities))
-
 (defpackage #:restas-swagger
   (:use #:cl
-        #:restas-swagger/utilities
-        #:restas-swagger/swagger
-        #:restas-swagger/openapi)
+        #:restas-swagger/utilities)
   (:export #:set-swagger-module-info
            #:set-swagger-module-properties
            #:get-swagger-definition/json))

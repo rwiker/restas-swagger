@@ -2,39 +2,18 @@
 
 (in-package #:restas-swagger)
 
+(defvar *swagger-modules*
+  (make-hash-table)
+  "Mapping from mounted module (packages) to swagger-module objects.")
+
 (defclass swagger-module ()
   ((info :accessor info :initarg :info :type info)
    (base-path :accessor base-path :initarg :base-path :initform "/api/v1/" :type string)
    (paths :accessor sw-paths :initform (make-hash-table :test #'equal))))
 
-(defclass info ()
-  ((title :accessor title :initarg :title)
-   (description :accessor description :initarg :description)
-   (terms-of-service :accessor terms-of-service :initarg :terms-of-service)
-   (contact :accessor contact :initarg :contact :type contact)
-   (license :accessor license :initarg :license :type license)
-   (version :accessor version :initarg :version)))
+(defmethod initialize-instance :around ((swagger-module swagger-module) &rest initargs &key &allow-other-keys)
+  (apply #'call-next-method swagger-module (expand-args initargs '(:info info))))
 
-(defclass contact ()
-  ((name :accessor name :initarg :name)
-   (url :accessor url :initarg :url)
-   (email :accessor email :initarg :email)))
-
-(defclass license ()
-  ((name :accessor name :initarg :name)
-   (url :accessor url :initarg :url)))
-
-(defclass server ()
-  ((url :accessor url :initarg :url)
-   (description :accessor description :initarg :description)
-   (variables :accessor variables :initform (make-hash-table :test #'equal))))
-
-(defmethod serialize-for-json ((info info))
-  (serialize-for-json-using-slots
-   info
-   '(title description version terms-of-service
-           contact license)))
-  
 (defmethod serialize-for-json ((object swagger-module))
   `((:swagger . "2.0")
     (:info . ,(serialize-for-json (info object)))
@@ -42,12 +21,39 @@
     (:paths . ,(loop for path being the hash-value of (sw-paths object)
                      collect (serialize-for-json path)))))
 
-(defvar *swagger-modules*
-  (make-hash-table)
-  "Mapping from mounted module (packages) to swagger-module objects.")
 
-(defmethod initialize-instance :around ((swagger-module swagger-module) &rest initargs &key &allow-other-keys)
-  (apply #'call-next-method swagger-module (recursively-construct 'swagger-module initargs)))
+(defclass info ()
+  ((title :accessor title :initarg :title :type string)
+   (description :accessor description :initarg :description :type string)
+   (terms-of-service :accessor terms-of-service :initarg :terms-of-service)
+   (contact :accessor contact :initarg :contact :type contact)
+   (license :accessor license :initarg :license :type license)
+   (version :accessor version :initarg :version)))
+
+(defmethod initialize-instance :around ((info info) &rest initargs &key &allow-other-keys)
+  (apply #'call-next-method info (expand-args initargs '(:contact contact :license license))))
+
+(defmethod serialize-for-json ((info info))
+  (serialize-for-json-using-slots
+   info
+   '(title description version terms-of-service
+           contact license)))
+
+
+(defclass contact ()
+  ((name :accessor name :initarg :name :type string)
+   (url :accessor url :initarg :url :type string)
+   (email :accessor email :initarg :email :type string)))
+
+(defclass license ()
+  ((name :accessor name :initarg :name :type string)
+   (url :accessor url :initarg :url :type string)))
+
+(defclass server ()
+  ((url :accessor url :initarg :url :type string)
+   (description :accessor description :initarg :description)
+   (variables :accessor variables :initform (make-hash-table :test #'equal))))
+
 
 (defun get-swagger-module (package)
   (let ((real-package (find-package package)))
@@ -55,25 +61,12 @@
         (setf (gethash real-package *swagger-modules*)
               (make-instance 'swagger-module)))))
 
-(defmethod initialize-instance :around ((info info) &rest initargs &key &allow-other-keys)
-  (apply #'call-next-method info (recursively-construct 'info initargs)))
-
 (defun set-swagger-module-info (package keys-and-values)
   (let ((module (get-swagger-module package)))
     (if module (setf (info module)
                      (apply 'make-instance 'info keys-and-values))
       (setf (gethash (find-package package) *swagger-modules*)
             (apply 'make-instance 'swagger-module (list :info keys-and-values))))))
-
-;;; FIXME: does not quite work... some more attention needed on paths.
-(defun get-swagger-definition/json (package)
-  (let ((module (get-swagger-module package)))
-    (when module
-      (cl-json:encode-json-to-string (serialize-for-json module)))))
-
-#||
-(get-swagger-definition/json 'sumo-surface-proto/api-v1)
-||#
 
 (defclass swagger-path ()
   ((path :accessor sw-path :initarg :path)
@@ -95,7 +88,7 @@
    (operation-id :accessor sw-id :initarg :id)
    (consumes :accessor sw-consumes :initarg :consumes :initform nil)
    (produces :accessor sw-produces :initarg :produces :initform nil)
-   (parameters :accessor sw-parameters :initarg :parameters :initform nil :type (list parameter))
+   (parameters :accessor sw-parameters :initarg :parameters :initform nil :type list)
    (responses :accessor sw-responses :initarg :responses :initform nil)
    (deprecated :accessor sw-deprecated :initarg :deprecated :initform nil)
    (security :accessor sw-security :initarg :security :initform nil)))
@@ -126,8 +119,10 @@
                  parameters responses
                  deprecated security)))
 
+
+
 (defmethod initialize-instance :around ((swagger-operation swagger-operation) &rest initargs &key &allow-other-keys)
-  (apply #'call-next-method swagger-operation (recursively-construct 'swagger-operation initargs)))
+  (apply #'call-next-method swagger-operation (expand-args initargs '(:parameters (list parameter)))))
 
 (defun make-swagger-operation  (id keys-and-values)
   (apply 'make-instance 'swagger-operation
@@ -147,10 +142,10 @@
    (required :accessor sw-required :initarg :required)))
 
 (defmethod initialize-instance :around ((parameter parameter) &rest initargs &key &allow-other-keys)
-  (apply #'call-next-method parameter (recursively-construct 'parameter initargs)))
+  (apply #'call-next-method parameter (expand-args initargs '(:items items))))
 
 (defmethod initialize-instance :after ((parameter parameter) &rest initargs &key &allow-other-keys)
-  (when (string= (sw-in parameter) "path")
+  (when (string= (string (sw-in parameter)) "path")
     (setf (sw-required parameter) t)))
 
 (defmethod serialize-for-json ((parameter parameter))
@@ -191,3 +186,14 @@
           (push `(:type string :in "path" :required t) parameters)))
       (let ((sw-operation (make-swagger-operation target declarations)))
         (setf (getf (sw-operations sw-path) method) sw-operation)))))
+
+
+(defun get-swagger-definition/json (package)
+  (let ((module (get-swagger-module package)))
+    (when module
+      (cl-json:encode-json-to-string (serialize-for-json module)))))
+
+#||
+(get-swagger-definition/json 'sumo-surface-proto/api-v1)
+||#
+

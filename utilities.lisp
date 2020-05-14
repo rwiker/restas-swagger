@@ -1,12 +1,5 @@
 (in-package #:restas-swagger/utilities)
 
-(defun maybe-simplify-type (type)
-  (trivia:match type
-    ((list 'and t actual-type)
-     actual-type)
-    (_
-     type)))
-
 (defun valid-keyword-list-p (keys-and-values)
   (and (evenp (length keys-and-values))
        (let ((keys (loop for k in keys-and-values by 'cddr
@@ -35,35 +28,22 @@
               (concatenate 'string line "...")
               (concatenate 'string line "."))))))))
 
-(defun recursively-construct (class initargs)
-  (let ((keys (valid-keyword-list-p initargs)))
-    (loop with class = (find-class class)
-          with slots = (closer-mop:class-slots class)
-          for key in keys
-          for value = (getf initargs key)
-          when (listp value)
-          do (let ((slot-definition (find-if (lambda (slot)
-                                               (member key (closer-mop:slot-definition-initargs slot)))
-                                             slots)))
-               (when slot-definition
-                 (let ((slot-type (closer-mop:slot-definition-type slot-definition)))
-                   (when slot-type
-                     (let ((simplified-slot-type (maybe-simplify-type slot-type)))
-                       (when simplified-slot-type
-                         (let ((actual-type (trivia:match simplified-slot-type
-                                              ((list 'list type)
-                                               type)
-                                              (_
-                                               simplified-slot-type))))
-                           (when (typep (find-class actual-type) 'standard-class)
-                             (let ((value
-                                    (if (listp simplified-slot-type)
-                                      (mapcar (lambda (initargs)
-                                                (apply 'make-instance actual-type initargs))
-                                              value)
-                                      (apply 'make-instance actual-type value))))
-                               (setf (getf initargs key) value))))))))))))
-  initargs)
+(defun expand-args (keys-and-values keys-and-classes)
+  (loop for (key value . rest) on keys-and-values by 'cddr
+        for spec = (getf keys-and-classes key)
+        nconc (list key
+                    (if spec
+                      (cond ((symbolp spec)
+                             (apply 'make-instance spec value))
+                            ((and (listp spec)
+                                  (eq (car spec) 'list)
+                                  (symbolp (cadr spec)))
+                             (mapcar (lambda (value)
+                                       (apply 'make-instance (cadr spec) value))
+                                     value))
+                            (t
+                             (error "Expected symbol or (list symbol): ~a" spec)))
+                      value))))
 
 (defun serialize-for-json-using-slots (object slots)
   (loop for slot in slots
