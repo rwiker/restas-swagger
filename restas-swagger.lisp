@@ -106,7 +106,7 @@
   ((flow :accessor sw-flow :initarg :flow)
    (authorization-url :accessor sw-authorization-url :initarg :authorization-url)
    (token-url :accessor sw-token-url :initarg :token-url)
-   (scopes :accessor sw-scopes :initarg :scopes :type )))
+   (scopes :accessor sw-scopes :initarg :scopes)))
 
 
 (defmethod serialize-for-json ((security-definition/oauth2 security-definition/oauth2))
