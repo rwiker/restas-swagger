@@ -1,7 +1,9 @@
 (in-package #:restas-swagger/utilities)
 
 (defun valid-keyword-list-p (keys-and-values)
-  (and (evenp (length keys-and-values))
+  (and (listp keys-and-values)
+       (listp (cdr keys-and-values))
+       (evenp (length keys-and-values))
        (let ((keys (loop for k in keys-and-values by 'cddr
                          collect k)))
          (when (every (lambda (k) (and (symbolp k) (keywordp k)))
@@ -29,21 +31,33 @@
               (concatenate 'string line "."))))))))
 
 (defun expand-args (keys-and-values keys-and-classes)
-  (loop for (key value . rest) on keys-and-values by 'cddr
-        for spec = (getf keys-and-classes key)
-        nconc (list key
-                    (if spec
-                      (cond ((symbolp spec)
-                             (apply 'make-instance spec value))
-                            ((and (listp spec)
-                                  (eq (car spec) 'list)
-                                  (symbolp (cadr spec)))
-                             (mapcar (lambda (value)
-                                       (apply 'make-instance (cadr spec) value))
-                                     value))
-                            (t
-                             (error "Expected symbol or (list symbol): ~a" spec)))
-                      value))))
+  (flet ((constructor (symbol)
+           (if (fboundp symbol)
+             (lambda (keys-and-values)
+               (apply symbol keys-and-values))
+             (lambda (keys-and-values)
+               (apply 'make-instance symbol keys-and-values)))))
+    (loop for (key value . rest) on keys-and-values by 'cddr
+          for spec = (getf keys-and-classes key)
+          nconc (list key
+                      (if spec
+                        (cond ((symbolp spec)
+                               (apply 'make-instance spec value))
+                              ((and (listp spec)
+                                    (eq (car spec) 'list)
+                                    (symbolp (cadr spec)))
+                               (mapcar (constructor (cadr spec))
+                                       value))
+                              ((and (listp spec)
+                                    (eq (car spec) 'plist)
+                                    (symbolp (cadr spec)))
+                               (loop with class = (cadr spec)
+                                     with constructor = (constructor class)
+                                     for (key value . rest) on value by 'cddr
+                                     nconc (list key (funcall constructor value))))
+                              (t
+                               (error "Expected symbol or (list symbol) or (plist symbol): ~a" spec)))
+                        value)))))
 
 (defun serialize-for-json-using-slots (object slots)
   (loop for slot in slots
@@ -59,7 +73,12 @@
   (if (valid-keyword-list-p object)
     (loop for (key val . nil) on object by 'cddr
           collect (cons key (serialize-for-json val)))
-    (mapcar 'serialize-for-json object)))
+    object))
+
+(defmethod serialize-for-json ((object hash-table))
+  (loop for key being the hash-key of object
+        using (hash-value value)
+        collect (cons key (serialize-for-json value))))
 
 (defmethod as-url-component ((template string))
   template)

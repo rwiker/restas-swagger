@@ -6,21 +6,38 @@
   (make-hash-table)
   "Mapping from mounted module (packages) to swagger-module objects.")
 
+(defun hash-table-values (hash-table)
+  (loop for value being the hash-value of hash-table
+        collect value))
+
+(defun maybe-serialize-for-json (object slot &key
+                                        (tag (intern (symbol-name slot) :keyword))
+                                        (test (constantly t)))
+  (when (and (slot-boundp object slot)
+             (funcall test (slot-value object slot)))
+    (list (cons tag (serialize-for-json (slot-value object slot))))))
+
 (defclass swagger-module ()
   ((info :accessor info :initarg :info :type info)
    (base-path :accessor base-path :initarg :base-path :initform "/api/v1/" :type string)
-   (paths :accessor sw-paths :initform (make-hash-table :test #'equal))))
+   (paths :accessor sw-paths :initform (make-hash-table :test #'equal))
+   (security-definitions :accessor sw-security-definitions :initarg :security-definitions)))
 
 (defmethod initialize-instance :around ((swagger-module swagger-module) &rest initargs &key &allow-other-keys)
-  (apply #'call-next-method swagger-module (expand-args initargs '(:info info))))
+  (apply #'call-next-method swagger-module (expand-args initargs '(:info info :security-definitions (plist make-security-definition)))))
 
 (defmethod serialize-for-json ((object swagger-module))
   `((:swagger . "2.0")
     (:info . ,(serialize-for-json (info object)))
     (:base-path . ,(serialize-for-json (base-path object)))
-    (:paths . ,(loop for path being the hash-value of (sw-paths object)
-                     collect (serialize-for-json path)))))
+    (:paths . ,(mapcar 'serialize-for-json (hash-table-values (sw-paths object))))
+    ,@(maybe-serialize-for-json object 'security-definitions)))
 
+(defclass dummy-swagger-module ()
+  ((paths :accessor sw-paths :initform (make-hash-table :test #'equal))))
+
+(defmethod serialize-for-json ((object dummy-swagger-module))
+  (error "Can't serialize dummy-swagger-module. Did you forget to call register-module?"))
 
 (defclass info ()
   ((title :accessor title :initarg :title :type string)
@@ -39,6 +56,15 @@
    '(title description version terms-of-service
            contact license)))
 
+#||
+(cl-json:encode-json-to-string
+ (serialize-for-json (first (hash-table-values *swagger-modules*))))
+
+(cl-json:encode-json-to-string
+ (serialize-for-json
+  (gethash "objects('{objectid}')"
+           (sw-paths (first (hash-table-values *swagger-modules*))))))
+||#
 
 (defclass contact ()
   ((name :accessor name :initarg :name :type string)
@@ -54,19 +80,64 @@
    (description :accessor description :initarg :description)
    (variables :accessor variables :initform (make-hash-table :test #'equal))))
 
+(defclass security-definition ()
+  ((type :accessor sw-type :initarg :type)
+   (description :accessor sw-description :initarg :description :initform nil)))
+
+(defmethod serialize-for-json ((security-definition security-definition))
+  (serialize-for-json-using-slots
+   security-definition
+   '(type description)))
+
+
+(defclass security-definition/basic (security-definition)
+  ())
+
+(defclass security-definition/api-key (security-definition)
+  ((name :accessor sw-name :initarg :name)
+   (in :accessor sw-in :initarg :in)))
+
+(defmethod serialize-for-json ((security-definition/api-key security-definition/api-key))
+  (serialize-for-json-using-slots
+   security-definition/api-key
+   '(type description name in)))
+
+(defclass security-definition/oauth2 (security-definition)
+  ((flow :accessor sw-flow :initarg :flow)
+   (authorization-url :accessor sw-authorization-url :initarg :authorization-url)
+   (token-url :accessor sw-token-url :initarg :token-url)
+   (scopes :accessor sw-scopes :initarg :scopes :type )))
+
+
+(defmethod serialize-for-json ((security-definition/oauth2 security-definition/oauth2))
+  (serialize-for-json-using-slots
+   security-definition/oauth2
+   '(type description flow authorization-url token-url scopes)))
+
+(defun make-security-definition (&rest keys-and-values)
+  (let ((type (getf keys-and-values :type)))
+    (assert type)
+    (ecase type
+      (:basic
+       (apply 'make-instance 'security-definition/basic keys-and-values))
+      (:api-key
+       (apply 'make-instance 'security-definition/api-key keys-and-values))
+      (:oauth2
+       (apply 'make-instance 'security-definition/oauth2 (expand-args keys-and-values '()))))))
 
 (defun get-swagger-module (package)
   (let ((real-package (find-package package)))
     (or (gethash real-package *swagger-modules*)
         (setf (gethash real-package *swagger-modules*)
-              (make-instance 'swagger-module)))))
+              (make-instance 'dummy-swagger-module)))))
 
-(defun set-swagger-module-info (package keys-and-values)
-  (let ((module (get-swagger-module package)))
-    (if module (setf (info module)
-                     (apply 'make-instance 'info keys-and-values))
-      (setf (gethash (find-package package) *swagger-modules*)
-            (apply 'make-instance 'swagger-module (list :info keys-and-values))))))
+(defun register-module (package keys-and-values)
+  (let ((module (apply 'make-instance 'swagger-module keys-and-values))
+        (old-module (gethash (find-package package) *swagger-modules*)))
+    (when old-module
+      (setf (sw-paths module) (sw-paths old-module)))
+    (setf (gethash (find-package package) *swagger-modules*)
+          module)))
 
 (defclass swagger-path ()
   ((path :accessor sw-path :initarg :path)

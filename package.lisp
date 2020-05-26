@@ -10,12 +10,12 @@
            #:serialize-for-json
            #:serialize-for-json-using-slots
            #:as-url-component
-           #:as-url))
+           #:as-url
+           #:plist))
 
 (defpackage #:restas-swagger
   (:use #:cl
         #:restas-swagger/utilities)
-  (:export #:set-swagger-module-info
-           #:set-swagger-module-properties
+  (:export #:register-module
            #:get-swagger-definition/json))
 
