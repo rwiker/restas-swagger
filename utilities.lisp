@@ -69,6 +69,9 @@
 (defmethod serialize-for-json ((object t))
   (identity object))
 
+(defmethod serialize-for-json ((object function))
+  (funcall object))
+
 (defmethod serialize-for-json ((object list))
   (if (valid-keyword-list-p object)
     (loop for (key val . nil) on object by 'cddr
