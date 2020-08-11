@@ -9,4 +9,5 @@
   :depends-on (swank restas cl-json)
   :components ((:file "package")
                (:file "utilities")
-               (:file "restas-swagger")))
+               (:file "restas-swagger")
+               (:file "swagger-ui")))

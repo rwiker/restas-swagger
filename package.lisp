@@ -19,3 +19,7 @@
   (:export #:register-module
            #:get-swagger-definition/json))
 
+(restas:define-module #:restas-swagger/swagger-ui
+  (:use #:cl #:restas-swagger)
+  (:documentation "Swagger UI for restas-swagger.")
+  (:export *swagger-ui-module*))
