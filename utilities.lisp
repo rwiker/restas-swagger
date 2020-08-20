@@ -76,7 +76,10 @@
   (if (valid-keyword-list-p object)
     (loop for (key val . nil) on object by 'cddr
           collect (cons key (serialize-for-json val)))
-    object))
+    (cons (serialize-for-json (car object))
+          (if (cdr object)
+            (serialize-for-json (cdr object))
+            nil))))
 
 (defmethod serialize-for-json ((object hash-table))
   (loop for key being the hash-key of object
