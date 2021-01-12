@@ -2,10 +2,19 @@
 
 (defparameter *swagger-ui-module* nil)
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defvar *root*
+    (with-open-file (in (merge-pathnames #p"./static/index.html"
+                                         (asdf/system:system-source-directory :restas-swagger))
+                        :direction :input)
+      (with-output-to-string (out)
+        (loop for line = (read-line in nil)
+              while line
+              do (write-line line out))))))
+
 (restas:define-route root ("" :method :get :content-type "text/html")
   "Interactive Swagger UI."
-  (merge-pathnames #p"./static/index.html"
-                   (asdf/system:system-source-directory :restas-swagger)))
+  *root*)
 
 (restas:define-route swagger/json ("swagger.json" :method :get :content-type "application/json")
   (:example-uri)
