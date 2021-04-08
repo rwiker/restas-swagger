@@ -158,6 +158,7 @@
    (description :accessor sw-description :initarg :description)
    (operation-id :accessor sw-id :initarg :id)
    (consumes :accessor sw-consumes :initarg :consumes :initform nil)
+   (schema :accessor sw-schema :initarg :schema :initform nil)
    (produces :accessor sw-produces :initarg :produces :initform nil)
    (parameters :accessor sw-parameters :initarg :parameters :initform nil :type list)
    (responses :accessor sw-responses :initarg :responses :initform nil)
@@ -186,7 +187,8 @@
   (sw-description object)
   (serialize-for-json-using-slots
    object '(tags summary description
-                 operation-id consumes produces
+                 operation-id consumes
+                 schema produces
                  parameters responses
                  deprecated security)))
 
@@ -210,6 +212,7 @@
    (format :accessor sw-format :initarg :format :type string)
    (items :accessor sw-items :initarg :items :type items)
    (description :accessor sw-description :initarg :description :initform nil)
+   (schema :accessor sw-schema :initarg :schema :initform nil)
    (required :accessor sw-required :initarg :required)))
 
 (defmethod initialize-instance :around ((parameter parameter) &rest initargs &key &allow-other-keys)
@@ -222,7 +225,7 @@
 (defmethod serialize-for-json ((parameter parameter))
   (append 
    (serialize-for-json-using-slots parameter
-                                   '(name in description type format required items))))
+                                   '(name in description type format required items schema))))
 
 (defclass items ()
   ((type :accessor sw-type :initarg :type :type string)
@@ -266,5 +269,9 @@
 
 #||
 (get-swagger-definition/json 'sumo-surface-proto/api-v1)
+(let ((module (get-swagger-module 'sumo/api-v1)))
+  (let ((path (gethash "aggregate" (sw-paths module))))
+    (clrhash (sw-paths module))
+    (setf (gethash "aggregate" (sw-paths module)) path)))
 ||#
 
