@@ -151,8 +151,11 @@
              path
              (concatenate 'string "/" path))))
     (cons (ensure-absolute (sw-path object))
+          (sort
            (loop for (method operation . nil ) on (sw-operations object) by 'cddr
-                 collect (cons method (serialize-for-json operation))))))
+                 collect (cons method (serialize-for-json operation)))
+           'string<=
+           :key 'car))))
 
 (defclass swagger-operation ()
   ((tags :accessor sw-tags :initarg :tags :initform nil)
