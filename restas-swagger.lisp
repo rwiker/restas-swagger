@@ -30,7 +30,9 @@
   `((:swagger . "2.0")
     (:info . ,(serialize-for-json (info object)))
     (:base-path . ,(serialize-for-json (base-path object)))
-    (:paths . ,(mapcar 'serialize-for-json (hash-table-values (sw-paths object))))
+    (:paths . ,(mapcar 'serialize-for-json
+                       (sort (hash-table-values (sw-paths object))
+                             'string<= :key 'sw-path)))
     ,@(maybe-serialize-for-json object 'security-definitions)))
 
 (defclass dummy-swagger-module ()
@@ -149,8 +151,8 @@
              path
              (concatenate 'string "/" path))))
     (cons (ensure-absolute (sw-path object))
-          (loop for (method operation . nil ) on (sw-operations object) by 'cddr
-                collect (cons method (serialize-for-json operation))))))
+           (loop for (method operation . nil ) on (sw-operations object) by 'cddr
+                 collect (cons method (serialize-for-json operation))))))
 
 (defclass swagger-operation ()
   ((tags :accessor sw-tags :initarg :tags :initform nil)
