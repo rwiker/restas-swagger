@@ -214,6 +214,7 @@
   ((name :accessor sw-name :initarg :name :type string)
    (in :accessor sw-in :initarg :in :type string)
    (type :accessor sw-type :initarg :type :type string)
+   (example :accessor sw-example :initarg :example :type string)
    (format :accessor sw-format :initarg :format :type string)
    (items :accessor sw-items :initarg :items :type items)
    (description :accessor sw-description :initarg :description :initform nil)
@@ -224,13 +225,14 @@
   (apply #'call-next-method parameter (expand-args initargs '(:items items))))
 
 (defmethod initialize-instance :after ((parameter parameter) &rest initargs &key &allow-other-keys)
+  (declare (ignore initargs))
   (when (string= (string (sw-in parameter)) "path")
     (setf (sw-required parameter) t)))
 
 (defmethod serialize-for-json ((parameter parameter))
   (append 
    (serialize-for-json-using-slots parameter
-                                   '(name in description type format required items schema))))
+                                   '(name in description type example format required items schema))))
 
 (defclass items ()
   ((type :accessor sw-type :initarg :type :type string)
