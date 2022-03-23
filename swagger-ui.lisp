@@ -3,7 +3,7 @@
 (defparameter *swagger-ui-module* nil)
 
 (eval-when (:compile-toplevel :load-toplevel :execute)
-  (defvar *root*
+  (defparameter *root*
     (with-open-file (in (merge-pathnames #p"./static/index.html"
                                          (asdf/system:system-source-directory :restas-swagger))
                         :direction :input)
@@ -17,6 +17,5 @@
   *root*)
 
 (restas:define-route swagger/json ("swagger.json" :method :get :content-type "application/json")
-  (:example-uri)
   "Get swagger definition for current module (by *swagger-ui-module*)."
   (get-swagger-definition/json *swagger-ui-module*))
