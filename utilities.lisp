@@ -37,7 +37,7 @@
                (apply symbol keys-and-values))
              (lambda (keys-and-values)
                (apply 'make-instance symbol keys-and-values)))))
-    (loop for (key value . rest) on keys-and-values by 'cddr
+    (loop for (key value . nil) on keys-and-values by 'cddr
           for spec = (getf keys-and-classes key)
           nconc (list key
                       (if spec
@@ -53,7 +53,7 @@
                                     (symbolp (cadr spec)))
                                (loop with class = (cadr spec)
                                      with constructor = (constructor class)
-                                     for (key value . rest) on value by 'cddr
+                                     for (key value . nil) on value by 'cddr
                                      nconc (list key (funcall constructor value))))
                               (t
                                (error "Expected symbol or (list symbol) or (plist symbol): ~a" spec)))
@@ -68,6 +68,18 @@
 
 (defmethod serialize-for-json ((object t))
   (identity object))
+
+(defmethod serialize-for-json ((object (eql :true)))
+  "true")
+
+(defmethod serialize-for-json ((object (eql t)))
+  "true")
+
+(defmethod serialize-for-json ((object (eql :false)))
+  "false")
+
+(defmethod serialize-for-json ((object (eql nil)))
+  "false")
 
 (defmethod serialize-for-json ((object function))
   (funcall object))
