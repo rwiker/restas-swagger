@@ -10,16 +10,9 @@
   (loop for value being the hash-value of hash-table
         collect value))
 
-(defun maybe-serialize-for-json (object slot &key
-                                        (tag (intern (symbol-name slot) :keyword))
-                                        (test (constantly t)))
-  (when (and (slot-boundp object slot)
-             (funcall test (slot-value object slot)))
-    (list (cons tag (serialize-for-json (slot-value object slot))))))
-
 (defclass swagger-module ()
   ((info :accessor info :initarg :info :type info)
-   (base-path :accessor base-path :initarg :base-path :initform "/api/v1/" :type string)
+   (base-path :accessor base-path :initarg :base-path :initform "/" :type string)
    (paths :accessor sw-paths :initform (make-hash-table :test #'equal))
    (security-definitions :accessor sw-security-definitions :initarg :security-definitions)))
 
@@ -27,13 +20,20 @@
   (apply #'call-next-method swagger-module (expand-args initargs '(:info info :security-definitions (plist make-security-definition)))))
 
 (defmethod serialize-for-json ((object swagger-module))
-  `((:swagger . "2.0")
-    (:info . ,(serialize-for-json (info object)))
-    (:base-path . ,(serialize-for-json (base-path object)))
-    (:paths . ,(mapcar 'serialize-for-json
-                       (sort (hash-table-values (sw-paths object))
-                             'string<= :key 'sw-path)))
-    ,@(maybe-serialize-for-json object 'security-definitions)))
+  (let ((res
+         (st-json:jso "swagger" "2.0"
+                      "info" (serialize-for-json (info object))
+                      "basePath" (serialize-for-json (base-path object))
+                      "paths" (apply 'st-json:jso
+                                     (mapcan (lambda (path)
+                                               (list (serialize-for-json (concatenate 'string "/" (sw-path path)))
+                                                     (serialize-for-json (sw-operations path))))
+                                             (sort (hash-table-values (sw-paths object)) 'string<= :key 'sw-path))))))
+    (when (and (slot-boundp object 'security-definitions)
+               (slot-value object 'security-definitions))
+      (setf (st-json:getjso (serialize-for-json 'security-definitions) res)
+            (serialize-for-json (slot-value object 'security-definitions))))
+    res))
 
 (defclass dummy-swagger-module ()
   ((paths :accessor sw-paths :initform (make-hash-table :test #'equal))))
@@ -72,6 +72,11 @@
   ((name :accessor name :initarg :name :type string)
    (url :accessor url :initarg :url :type string)
    (email :accessor email :initarg :email :type string)))
+
+(defmethod serialize-for-json ((contact contact))
+  (serialize-for-json-using-slots
+   contact
+   '(name url email)))
 
 (defclass license ()
   ((name :accessor name :initarg :name :type string)
@@ -150,12 +155,15 @@
            (if (char= (char path 0) #\/)
              path
              (concatenate 'string "/" path))))
-    (cons (ensure-absolute (sw-path object))
-          (sort
-           (loop for (method operation . nil ) on (sw-operations object) by 'cddr
-                 collect (cons method (serialize-for-json operation)))
-           'string<=
-           :key 'car))))
+    (st-json:jso (ensure-absolute (sw-path object))
+                 (loop with res = (st-json:jso)
+                       with operations = (loop for (method operation) on (sw-operations object) by 'cddr
+                                               collect (cons method operation))
+                       with sorted-operations = (sort operations 'string<= :key 'car)
+                       for (method . operation) in sorted-operations
+                       do (setf (st-json:getjso (serialize-for-json method) res)
+                                (serialize-for-json operation))
+                       finally (return res)))))
 
 (defclass swagger-operation ()
   ((tags :accessor sw-tags :initarg :tags :initform nil)
@@ -196,8 +204,6 @@
                  schema produces
                  parameters responses
                  deprecated security)))
-
-
 
 (defmethod initialize-instance :around ((swagger-operation swagger-operation) &rest initargs &key &allow-other-keys)
   (apply #'call-next-method swagger-operation (expand-args initargs '(:parameters (list parameter)))))
@@ -261,8 +267,8 @@
         (setf (getf declarations :produces)
               (list content-type)))
       (dolist (var variables)
-        (unless (member var parameters)
-          (push `(:type string :in "path" :required t) parameters)))
+        (unless (member var parameters :key (lambda (param) (getf param :name)))
+          (push `(:name ,var :type string :in "path" :required t) parameters)))
       (let ((sw-operation (make-swagger-operation target declarations)))
         (setf (getf (sw-operations sw-path) method) sw-operation)))))
 
@@ -270,7 +276,7 @@
 (defun get-swagger-definition/json (package)
   (let ((module (get-swagger-module package)))
     (when module
-      (cl-json:encode-json-to-string (serialize-for-json module)))))
+      (st-json:write-json-to-string (serialize-for-json module)))))
 
 #||
 (get-swagger-definition/json 'sumo-surface-proto/api-v1)

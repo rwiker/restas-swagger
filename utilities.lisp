@@ -10,6 +10,15 @@
                       keys)
            keys))))
 
+(defun valid-cons-list-p (keys-and-values)
+  (and (listp keys-and-values)
+       (every (lambda (elt)
+                (and (consp elt)
+                     (or (stringp (car elt))
+                         (symbolp (car elt)))
+                     (not (listp (cdr elt)))))
+              keys-and-values)))
+
 (defun slot-valid (object slot)
   (and (slot-boundp object slot)
        (slot-value object slot)))
@@ -60,44 +69,64 @@
                         value)))))
 
 (defun serialize-for-json-using-slots (object slots)
-  (loop for slot in slots
+  (loop with res = (st-json:jso)
+        for slot in slots
         for value = (and (slot-boundp object slot)
                          (slot-value object slot))
         when value
-        collect (cons slot (serialize-for-json value))))
+          do (setf (st-json:getjso (serialize-for-json slot) res)
+                   (serialize-for-json value))
+        finally (return res)))
 
 (defmethod serialize-for-json ((object t))
-  (identity object))
+  object)
+
+(defmethod serialize-for-json ((object symbol))
+  (let* ((name (symbol-name object))
+         (converted-name (cl-change-case:camel-case name)))
+    (if (char= (char name 0) #\$)
+      (concatenate 'string "$" converted-name)
+      converted-name)))
 
 (defmethod serialize-for-json ((object (eql :true)))
-  "true")
-
-(defmethod serialize-for-json ((object (eql t)))
-  "true")
+  object)
 
 (defmethod serialize-for-json ((object (eql :false)))
-  "false")
+  object)
+
+(defmethod serialize-for-json ((object (eql t)))
+  object)
 
 (defmethod serialize-for-json ((object (eql nil)))
-  "false")
+  object)
 
 (defmethod serialize-for-json ((object function))
   (funcall object))
 
 (defmethod serialize-for-json ((object list))
-  (if (valid-keyword-list-p object)
-    (loop for (key val . nil) on object by 'cddr
-          collect (cons key (serialize-for-json val)))
-    (cons (serialize-for-json (car object))
-          (if (cdr object)
-            (serialize-for-json (cdr object))
-            nil))))
+  (cond ((valid-keyword-list-p object)
+         (loop with res = (st-json:jso)
+               for (key val) on object by 'cddr
+               do (setf (st-json:getjso (serialize-for-json key) res)
+                        (serialize-for-json val))
+               finally (return res)))
+        ((valid-cons-list-p object)
+         (loop with res = (st-json:jso)
+               for (key . val) in object
+               do (setf (st-json:getjso (serialize-for-json key) res)
+                        (serialize-for-json val))
+               finally (return res)))
+        (t
+         (mapcar 'serialize-for-json object))))
 
 (defmethod serialize-for-json ((object hash-table))
-  (loop for key being the hash-key of object
-        using (hash-value value)
-        collect (cons key (serialize-for-json value))))
-
+  (loop with res = (st-json:jso)
+        for key being the hash-key of object
+          using (hash-value value)
+        do
+          (setf (st-json:getjso (serialize-for-json key) res) (serialize-for-json value))
+        finally (return res)))
+  
 (defmethod as-url-component ((template string))
   template)
 

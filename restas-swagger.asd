@@ -6,7 +6,7 @@
   :license  "Specify license here"
   :version "0.0.1"
   :serial t
-  :depends-on (swank restas cl-json)
+  :depends-on (swank restas st-json cl-change-case)
   :components ((:file "package")
                (:file "utilities")
                (:file "restas-swagger")
